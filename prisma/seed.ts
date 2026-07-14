@@ -6,69 +6,122 @@ const prisma = new PrismaClient();
 
 async function main() {
 
+  console.log('Starting database seed...');
+
+
+  // Create roles
+
   const superAdminRole =
     await prisma.role.upsert({
-      where:{
-        name:'SUPER_ADMIN'
+      where: {
+        name: 'SUPER_ADMIN',
       },
-      update:{},
-      create:{
-        name:'SUPER_ADMIN'
-      }
+      update: {},
+      create: {
+        name: 'SUPER_ADMIN',
+      },
     });
 
 
-  const orgAdminRole =
+  const organizationAdminRole =
     await prisma.role.upsert({
-      where:{
-        name:'ORGANIZATION_ADMIN'
+      where: {
+        name: 'ORGANIZATION_ADMIN',
       },
-      update:{},
-      create:{
-        name:'ORGANIZATION_ADMIN'
-      }
+      update: {},
+      create: {
+        name: 'ORGANIZATION_ADMIN',
+      },
     });
 
 
-  const password =
+
+  // Create Super Admin user
+
+  const hashedPassword =
     await bcrypt.hash(
       'Admin@123',
-      10
+      10,
     );
 
 
   const superAdmin =
     await prisma.user.upsert({
-      where:{
-        email:'superadmin@system.com'
-      },
-      update:{},
-      create:{
-        email:'superadmin@system.com',
-        password,
 
-        firstName:'Super',
-        lastName:'Admin'
-      }
+      where: {
+        email: 'superadmin@system.com',
+      },
+
+      update: {},
+
+      create: {
+
+        email: 'superadmin@system.com',
+
+        password: hashedPassword,
+
+        firstName: 'Super',
+
+        lastName: 'Admin',
+
+        // No organization
+        organizationId: null,
+
+      },
+
     });
 
 
-  await prisma.userRole.create({
-    data:{
-      userId:superAdmin.id,
-      roleId:superAdminRole.id
-    }
+
+  // Assign SUPER_ADMIN role
+
+  await prisma.userRole.upsert({
+
+    where: {
+      userId_roleId: {
+        userId: superAdmin.id,
+        roleId: superAdminRole.id,
+      },
+    },
+
+    update: {},
+
+    create: {
+
+      userId: superAdmin.id,
+
+      roleId: superAdminRole.id,
+
+    },
+
   });
 
 
-  console.log(
-    'SuperAdmin created'
-  );
+
+  console.log('Seed completed successfully');
+
+  console.log({
+    superAdmin: superAdmin.email,
+    rolesCreated: [
+      superAdminRole.name,
+      organizationAdminRole.name,
+    ],
+  });
+
 }
 
 
+
 main()
-.catch(console.error)
-.finally(()=>{
-  prisma.$disconnect();
-});
+  .catch((error) => {
+
+    console.error(error);
+
+    process.exit(1);
+
+  })
+  .finally(async () => {
+
+    await prisma.$disconnect();
+
+  });
