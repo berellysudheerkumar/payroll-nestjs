@@ -38,6 +38,13 @@ export class AuthService {
       where: {
         email,
       },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -50,12 +57,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const roles = user.roles.map(userRole => userRole.role.name);
+
     const token = this.jwt.sign({
       sub: user.id,
-
       email: user.email,
-
       organizationId: user.organizationId,
+      roles,
     });
 
     return {

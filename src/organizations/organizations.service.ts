@@ -10,25 +10,6 @@ import * as bcrypt from 'bcrypt';
 export class OrganizationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateOrganizationDto) {
-    const existing = await this.prisma.organization.findUnique({
-      where: {
-        code: dto.code,
-      },
-    });
-
-    if (existing) {
-      throw new ConflictException('Organization code already exists');
-    }
-
-    return this.prisma.organization.create({
-      data: {
-        name: dto.name,
-        code: dto.code,
-      },
-    });
-  }
-
   async createOrganizationWithAdmin(dto: CreateOrganizationDto) {
     return this.prisma.$transaction(async tx => {
       const existing = await tx.organization.findUnique({

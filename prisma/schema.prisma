@@ -7,11 +7,68 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SalaryComponentType {
+  EARNING
+  DEDUCTION
+}
+
+enum SalaryCalculationType {
+  FIXED
+  PERCENTAGE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  CONSULTANT
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  RESIGNED
+  TERMINATED
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  PROCESSING
+  PROCESSED
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum PayrollAuditAction {
+  CREATED
+  PROCESSED
+  APPROVED
+  CANCELLED
+  PAID
+}
+
+enum SalaryCalculationBasis {
+  BASIC
+  GROSS
+  FIXED_EARNINGS
+  TOTAL_EARNINGS
+}
+
 model Organization {
-  id   String @id @default(uuid())
-  name String
-  code String @unique
-  users User[]
+  id          String       @id @default(uuid())
+  name        String
+  code        String       @unique
+  users       User[]
+  employees   Employee[]
+  departments Department[]
+
+  salaryStructures SalaryStructure[]
+
+  payrollPeriods PayrollPeriod[]
+  payrollRuns    PayrollRun[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -31,6 +88,10 @@ model User {
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   roles UserRole[]
+
+  approvedPayrollRuns PayrollRun[]      @relation("PayrollRunApprovedBy")
+  paidPayrollRuns PayrollRun[] @relation("PayrollRunPaidBy")
+  payrollAudits       PayrollRunAudit[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -54,4 +115,216 @@ model UserRole {
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, roleId])
+}
+
+model Employee {
+  id String @id @default(uuid())
+
+  employeeCode String
+
+  firstName String
+  lastName  String
+
+  email String?
+  phone String?
+
+  dateOfBirth   DateTime?
+  dateOfJoining DateTime
+
+  salaryStructures SalaryStructure[]
+
+  employmentType   EmploymentType   @default(FULL_TIME)
+  employmentStatus EmploymentStatus @default(ACTIVE)
+
+  dateOfLeaving DateTime?
+
+  organizationId String
+  departmentId   String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  payrollItems PayrollItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, employeeCode])
+  @@index([organizationId])
+  @@index([departmentId])
+}
+
+model Department {
+  id String @id @default(uuid())
+
+  name String
+  code String
+
+  organizationId String
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model SalaryStructure {
+  id String @id @default(uuid())
+
+  employeeId     String
+  organizationId String
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  components SalaryComponent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([organizationId])
+  @@index([organizationId, employeeId])
+}
+
+model SalaryComponent {
+  id String @id @default(cuid())
+
+  salaryStructureId String
+
+  name String
+
+  type SalaryComponentType
+
+  calculationType SalaryCalculationType
+
+  calculationBasis SalaryCalculationBasis?
+
+  amount Decimal @db.Decimal(12, 2)
+
+  salaryStructure SalaryStructure @relation(fields: [salaryStructureId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([salaryStructureId])
+}
+
+model PayrollPeriod {
+  id             String @id @default(cuid())
+  organizationId String
+
+  name      String
+  startDate DateTime
+  endDate   DateTime
+
+  payrollRuns PayrollRun[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, startDate, endDate])
+  @@index([organizationId])
+}
+
+model PayrollRun {
+  id              String @id @default(cuid())
+  organizationId  String
+  payrollPeriodId String
+
+  status PayrollRunStatus @default(DRAFT)
+
+  processedAt DateTime?
+
+  approvedAt   DateTime?
+  approvedById String?
+
+  payrollPeriod PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  payrollItems PayrollItem[]
+  audits       PayrollRunAudit[]
+  paidAt        DateTime?
+  paidById      String?
+  paymentReference String?
+
+  approvedBy User? @relation("PayrollRunApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  paidBy User? @relation("PayrollRunPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, payrollPeriodId])
+  @@index([organizationId])
+  @@index([payrollPeriodId])
+}
+
+model PayrollItem {
+  id           String @id @default(cuid())
+  payrollRunId String
+  employeeId   String
+
+  grossSalary     Decimal @db.Decimal(12, 2)
+  totalEarnings   Decimal @db.Decimal(12, 2)
+  totalDeductions Decimal @db.Decimal(12, 2)
+  netSalary       Decimal @db.Decimal(12, 2)
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  components PayrollItemComponent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([payrollRunId, employeeId])
+  @@index([payrollRunId])
+  @@index([employeeId])
+}
+
+model PayrollRunAudit {
+  id           String             @id @default(cuid())
+  payrollRunId String
+  userId       String
+  action       PayrollAuditAction
+
+  createdAt DateTime @default(now())
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([payrollRunId])
+  @@index([userId])
+}
+
+model PayrollItemComponent {
+  id String @id @default(cuid())
+
+  payrollItemId String
+
+  name String
+  type SalaryComponentType
+  calculationType SalaryCalculationType
+
+  amount Decimal @db.Decimal(12, 2)
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([payrollItemId])
 }
