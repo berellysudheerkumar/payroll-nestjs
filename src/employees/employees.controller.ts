@@ -1,4 +1,15 @@
-import {Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards} from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 
 import {ApiTags} from '@nestjs/swagger';
 
@@ -26,8 +37,13 @@ export class EmployeesController {
 
   @Get()
   @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
-  findAll(@Req() req: any) {
-    return this.employeesService.findAll(req.user.organizationId);
+  findAll(
+    @Req() req: any,
+    @Query('search') search?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.employeesService.findAll(req.user.organizationId, search, departmentId, status);
   }
 
   @Get(':id')

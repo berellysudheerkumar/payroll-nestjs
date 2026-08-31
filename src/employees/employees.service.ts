@@ -9,6 +9,7 @@ import {PrismaService} from '../prisma/prisma.service';
 
 import {CreateEmployeeDto} from './dto/create-employee.dto';
 import {UpdateEmployeeDto} from './dto/update-employee.dto';
+import {EmploymentStatus} from '@prisma/client';
 
 @Injectable()
 export class EmployeesService {
@@ -64,11 +65,64 @@ export class EmployeesService {
     });
   }
 
-  async findAll(organizationId: string) {
+  async findAll(organizationId: string, search?: string, departmentId?: string, status?: string) {
+    const employmentStatus =
+      status && Object.values(EmploymentStatus).includes(status as EmploymentStatus)
+        ? (status as EmploymentStatus)
+        : undefined;
+
     return this.prisma.employee.findMany({
       where: {
         organizationId,
+
+        ...(search
+          ? {
+              OR: [
+                {
+                  employeeCode: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  firstName: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  lastName: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  email: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
+            }
+          : {}),
+
+        ...(departmentId
+          ? {
+              departmentId,
+            }
+          : {}),
+
+        ...(employmentStatus
+          ? {
+              employmentStatus,
+            }
+          : {}),
       },
+
+      include: {
+        department: true,
+      },
+
       orderBy: {
         createdAt: 'desc',
       },
@@ -80,6 +134,9 @@ export class EmployeesService {
       where: {
         id,
         organizationId,
+      },
+      include: {
+        department: true,
       },
     });
 

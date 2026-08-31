@@ -5,6 +5,7 @@ import {ApiTags} from '@nestjs/swagger';
 import {OrganizationsService} from './organizations.service';
 import {CreateOrganizationAdminDto} from './dto/create-organization-admin.dto';
 import {UpdateOrganizationDto} from './dto/update-organization.dto';
+import {UpdateOrganizationAdministratorDto} from './dto/update-organization-administrator.dto';
 
 import {JwtAuthGuard} from 'src/auth/guards/jwt-auth.guard';
 import {RolesGuard} from 'src/roles/roles.guard';
@@ -27,6 +28,30 @@ export class OrganizationsController {
   @Roles(Role.SUPER_ADMIN)
   findAll() {
     return this.organizationsService.findAll();
+  }
+
+  @Get('dashboard/summary')
+  @Roles(Role.SUPER_ADMIN)
+  getDashboardSummary() {
+    return this.organizationsService.getDashboardSummary();
+  }
+
+  @Get('administrators')
+  @Roles(Role.SUPER_ADMIN)
+  findAdministrators() {
+    return this.organizationsService.findAdministrators();
+  }
+
+  @Get('administrators/:id')
+  @Roles(Role.SUPER_ADMIN)
+  findAdministrator(@Param('id') id: string) {
+    return this.organizationsService.findAdministrator(id);
+  }
+
+  @Patch('administrators/:id')
+  @Roles(Role.SUPER_ADMIN)
+  updateAdministrator(@Param('id') id: string, @Body() dto: UpdateOrganizationAdministratorDto) {
+    return this.organizationsService.updateAdministrator(id, dto);
   }
 
   @Get(':id')
