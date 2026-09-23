@@ -7,6 +7,8 @@ import {EmployeesModule} from './employees/employees.module';
 import {DepartmentsModule} from './departments/departments.module';
 import {SalaryStructuresModule} from './salary-structures/salary-structures.module';
 import {PayrollModule} from './payroll/payroll.module';
+import {OpenaiModule} from './openai/openai.module';
+import {AttendanceModule} from './attendance/attendance.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import {PayrollModule} from './payroll/payroll.module';
     DepartmentsModule,
     SalaryStructuresModule,
     PayrollModule,
+    AttendanceModule,
+    OpenaiModule,
   ],
 })
 export class AppModule {}

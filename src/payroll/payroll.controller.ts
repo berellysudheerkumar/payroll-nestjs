@@ -1,4 +1,14 @@
-import {Body, Controller, Get, Post, Res, Req, Param, UseGuards} from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Res,
+  Req,
+  Param,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import type {Response} from 'express';
 
 import {ApiTags} from '@nestjs/swagger';
@@ -7,6 +17,7 @@ import {PayrollService} from './payroll.service';
 import {CreatePayrollPeriodDto} from './dto/create-payroll-period.dto';
 import {CreatePayrollRunDto} from './dto/create-payroll-run.dto';
 import {MarkPayrollPaidDto} from './dto/create-payroll-run.dto';
+import {OpenaiService} from '../openai/openai.service';
 
 import {JwtAuthGuard} from 'src/auth/guards/jwt-auth.guard';
 import {RolesGuard} from 'src/roles/roles.guard';
@@ -17,7 +28,10 @@ import {Role} from 'src/roles/roles.enum';
 @Controller('payroll')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PayrollController {
-  constructor(private readonly payrollService: PayrollService) {}
+  constructor(
+    private readonly payrollService: PayrollService,
+    private readonly openaiService: OpenaiService,
+  ) {}
 
   @Post('periods')
   @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
@@ -112,7 +126,37 @@ export class PayrollController {
 
     res.send(result.buffer);
   }
+
+  @Get('my-payslips')
+  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
+  getMyPayslips(@Req() req: any) {
+    return this.payrollService.getMyPayslips(req.user.organizationId, req.user.email);
+  }
+
+  @Get('my-payslips/:runId/pdf')
+  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
+  async downloadMyPayslip(
+    @Req() req: any,
+    @Param('runId') payrollRunId: string,
+    @Res() res: Response,
+  ) {
+    const result = await this.payrollService.generateMyPayslip(
+      req.user.organizationId,
+      req.user.email,
+      payrollRunId,
+    );
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${result.fileName}"`,
+      'Content-Length': result.buffer.length.toString(),
+    });
+
+    res.send(result.buffer);
+  }
+
   @Get('runs/:runId/payslips/:employeeId')
+  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
   async generatePayslip(
     @Req() req,
     @Param('runId') payrollRunId: string,
@@ -132,5 +176,23 @@ export class PayrollController {
     });
 
     res.send(result.buffer);
+  }
+
+  @Post('ask')
+  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  async askPayrollQuestion(@Req() req: any, @Body('query') query: string) {
+    if (!query) {
+      throw new BadRequestException('Query string is required');
+    }
+
+    const answer = await this.openaiService.processNaturalLanguageQuery(
+      query,
+      req.user.organizationId,
+      async (orgId, args) => {
+        return this.payrollService.aggregatePayrollData(orgId, args);
+      },
+    );
+
+    return {answer};
   }
 }

@@ -69,6 +69,7 @@ model Organization {
 
   payrollPeriods PayrollPeriod[]
   payrollRuns    PayrollRun[]
+  attendances    Attendance[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -146,6 +147,7 @@ model Employee {
   department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   payrollItems PayrollItem[]
+  attendances  Attendance[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -283,6 +285,10 @@ model PayrollItem {
   totalDeductions Decimal @db.Decimal(12, 2)
   netSalary       Decimal @db.Decimal(12, 2)
 
+  totalDays   Int     @default(0)
+  payableDays Decimal @default(0) @db.Decimal(5, 2)
+  lopDays     Decimal @default(0) @db.Decimal(5, 2)
+
   payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
   employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   components PayrollItemComponent[]
@@ -328,3 +334,39 @@ model PayrollItemComponent {
 
   @@index([payrollItemId])
 }
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  ON_LEAVE
+  WORK_FROM_HOME
+  HOLIDAY
+  WEEK_OFF
+}
+
+model Attendance {
+  id             String           @id @default(cuid())
+  date           DateTime         @db.Date
+  status         AttendanceStatus @default(PRESENT)
+  checkIn        DateTime?
+  checkOut       DateTime?
+  workingMinutes Int?             @default(0)
+  remarks        String?
+
+  employeeId     String
+  organizationId String
+
+  employee       Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, employeeId, date])
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([date])
+  @@index([organizationId, date])
+}
+

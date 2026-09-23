@@ -404,19 +404,44 @@ export class PayrollService {
           }
 
           /*
-           * Calculate payable days
+           * Calculate eligible calendar days (tenure within period)
            */
 
-          const payableDays = this.calculatePayableDays(
+          const eligibleDays = this.calculatePayableDays(
             periodStart,
             periodEnd,
             employee.dateOfJoining,
             employee.dateOfLeaving,
           );
 
-          if (payableDays <= 0) {
+          if (eligibleDays <= 0) {
             continue;
           }
+
+          /*
+           * Query actual attendance records for this employee within the period
+           */
+          const attendances = await tx.attendance.findMany({
+            where: {
+              organizationId,
+              employeeId: employee.id,
+              date: {
+                gte: periodStart,
+                lte: periodEnd,
+              },
+            },
+          });
+
+          let lopDays = 0;
+          for (const att of attendances) {
+            if (att.status === 'ABSENT') {
+              lopDays += 1;
+            } else if (att.status === 'HALF_DAY') {
+              lopDays += 0.5;
+            }
+          }
+
+          const payableDays = Math.max(0, eligibleDays - lopDays);
 
           // ------------------------------------------------
           // Calculate proration
@@ -551,6 +576,10 @@ export class PayrollService {
               totalEarnings,
               totalDeductions,
               netSalary,
+
+              totalDays: periodDays,
+              payableDays,
+              lopDays,
 
               components: {
                 create: salaryStructure.components.map(component => {
@@ -1147,6 +1176,10 @@ export class PayrollService {
         totalDeductions: Number(item.totalDeductions),
         netSalary: Number(item.netSalary),
 
+        totalDays: item.totalDays,
+        payableDays: Number(item.payableDays),
+        lopDays: Number(item.lopDays),
+
         components: item.components.map(component => ({
           id: component.id,
           name: component.name,
@@ -1225,6 +1258,21 @@ export class PayrollService {
         width: 20,
       },
       {
+        header: 'Total Days',
+        key: 'totalDays',
+        width: 14,
+      },
+      {
+        header: 'Payable Days',
+        key: 'payableDays',
+        width: 14,
+      },
+      {
+        header: 'LOP Days',
+        key: 'lopDays',
+        width: 14,
+      },
+      {
         header: 'Gross Salary',
         key: 'grossSalary',
         width: 18,
@@ -1253,6 +1301,12 @@ export class PayrollService {
         employeeName: `${item.employee.firstName} ${item.employee.lastName}`.trim(),
 
         department: item.employee.department?.name ?? '',
+
+        totalDays: item.totalDays,
+
+        payableDays: Number(item.payableDays),
+
+        lopDays: Number(item.lopDays),
 
         grossSalary: Number(item.grossSalary),
 
@@ -1465,7 +1519,7 @@ export class PayrollService {
 
     const employeeCardTop = y;
 
-    doc.roundedRect(pageLeft, employeeCardTop, pageWidth, 78, 4).fill('#f9fafb');
+    doc.roundedRect(pageLeft, employeeCardTop, pageWidth, 98, 4).fill('#f9fafb');
 
     /*
      * Row 1
@@ -1489,7 +1543,21 @@ export class PayrollService {
 
     drawLabelValue('Employment Type', employee.employmentType, 310, y + 43, 405);
 
-    y += 105;
+    /*
+     * Row 3: Attendance Details
+     */
+
+    drawLabelValue(
+      'Payable / Total Days',
+      `${Number(payrollItem.payableDays)} / ${payrollItem.totalDays}`,
+      65,
+      y + 71,
+      185,
+    );
+
+    drawLabelValue('Loss of Pay (LOP)', `${Number(payrollItem.lopDays)} days`, 310, y + 71, 405);
+
+    y += 122;
 
     /*
      * =========================================================
@@ -1902,5 +1970,120 @@ export class PayrollService {
       fileName: `payslip-${employee.employeeCode}-${payrollRun.payrollPeriod.name}.pdf`,
       buffer: Buffer.concat(chunks),
     };
+  }
+
+  // Add to src/payroll/payroll.service.ts
+
+  async aggregatePayrollData(
+    organizationId: string,
+    filters: {status?: string; departmentName?: string},
+  ) {
+    const whereClause: any = {
+      payrollRun: {
+        organizationId,
+      },
+    };
+
+    if (filters.status) {
+      whereClause.payrollRun.status = filters.status;
+    }
+
+    if (filters.departmentName) {
+      whereClause.employee = {
+        department: {name: filters.departmentName},
+      };
+    }
+
+    const aggregations = await this.prisma.payrollItem.aggregate({
+      where: whereClause,
+      _sum: {
+        grossSalary: true,
+        totalEarnings: true,
+        totalDeductions: true,
+        netSalary: true,
+      },
+      _count: {
+        employeeId: true,
+      },
+    });
+
+    return {
+      totalEmployeesPaid: aggregations._count.employeeId,
+      totalGross: Number(aggregations._sum.grossSalary || 0),
+      totalNet: Number(aggregations._sum.netSalary || 0),
+      totalDeductions: Number(aggregations._sum.totalDeductions || 0),
+    };
+  }
+
+  async getMyPayslips(organizationId: string, email: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: {organizationId, email},
+    });
+
+    if (!employee) {
+      throw new NotFoundException(`No employee profile found for user '${email}'.`);
+    }
+
+    const items = await this.prisma.payrollItem.findMany({
+      where: {
+        employeeId: employee.id,
+        payrollRun: {
+          organizationId,
+          status: {
+            in: ['APPROVED', 'PAID'],
+          },
+        },
+      },
+      include: {
+        payrollRun: {
+          include: {
+            payrollPeriod: true,
+          },
+        },
+        components: true,
+      },
+      orderBy: {
+        payrollRun: {
+          payrollPeriod: {
+            startDate: 'desc',
+          },
+        },
+      },
+    });
+
+    return items.map(item => ({
+      id: item.id,
+      payrollRunId: item.payrollRunId,
+      periodName: item.payrollRun.payrollPeriod.name,
+      startDate: item.payrollRun.payrollPeriod.startDate,
+      endDate: item.payrollRun.payrollPeriod.endDate,
+      status: item.payrollRun.status,
+      grossSalary: Number(item.grossSalary),
+      totalEarnings: Number(item.totalEarnings),
+      totalDeductions: Number(item.totalDeductions),
+      netSalary: Number(item.netSalary),
+      totalDays: item.totalDays,
+      payableDays: Number(item.payableDays),
+      lopDays: Number(item.lopDays),
+      components: item.components.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        calculationType: c.calculationType,
+        amount: Number(c.amount),
+      })),
+    }));
+  }
+
+  async generateMyPayslip(organizationId: string, email: string, payrollRunId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: {organizationId, email},
+    });
+
+    if (!employee) {
+      throw new NotFoundException(`No employee profile found for user '${email}'.`);
+    }
+
+    return this.generatePayslip(organizationId, payrollRunId, employee.id);
   }
 }

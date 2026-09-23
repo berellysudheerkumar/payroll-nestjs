@@ -220,4 +220,40 @@ export class EmployeesService {
       message: 'Employee deleted successfully',
     };
   }
+
+  async getMyProfile(organizationId: string, email: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: {
+        organizationId,
+        email,
+      },
+      include: {
+        department: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+        salaryStructures: {
+          orderBy: {
+            effectiveFrom: 'desc',
+          },
+          take: 1,
+          include: {
+            components: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException(
+        `No employee profile found for user '${email}' in this organization.`,
+      );
+    }
+
+    return employee;
+  }
 }

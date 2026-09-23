@@ -46,6 +46,12 @@ export class EmployeesController {
     return this.employeesService.findAll(req.user.organizationId, search, departmentId, status);
   }
 
+  @Get('me')
+  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
+  getMyProfile(@Req() req: any) {
+    return this.employeesService.getMyProfile(req.user.organizationId, req.user.email);
+  }
+
   @Get(':id')
   @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
   findOne(@Req() req: any, @Param('id') id: string) {
