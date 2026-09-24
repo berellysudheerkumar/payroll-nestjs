@@ -34,37 +34,37 @@ export class PayrollController {
   ) {}
 
   @Post('periods')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   createPeriod(@Req() req: any, @Body() dto: CreatePayrollPeriodDto) {
     return this.payrollService.createPeriod(req.user.organizationId, dto);
   }
 
   @Get('periods')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   getPeriods(@Req() req: any) {
     return this.payrollService.getPeriods(req.user.organizationId);
   }
 
   @Get('runs')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   getRuns(@Req() req: any) {
     return this.payrollService.getRuns(req.user.organizationId);
   }
 
   @Post('runs')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   createRun(@Req() req: any, @Body() dto: CreatePayrollRunDto) {
     return this.payrollService.createRun(req.user.organizationId, dto, req.user.id);
   }
 
   @Post('runs/:id/process')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   processRun(@Req() req: any, @Param('id') id: string) {
     return this.payrollService.processRun(req.user.organizationId, id, req.user.id);
   }
 
   @Get('runs/:id')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   getRun(@Req() req: any, @Param('id') id: string) {
     return this.payrollService.getRun(req.user.organizationId, id);
   }
@@ -156,7 +156,7 @@ export class PayrollController {
   }
 
   @Get('runs/:runId/payslips/:employeeId')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   async generatePayslip(
     @Req() req,
     @Param('runId') payrollRunId: string,
@@ -179,19 +179,13 @@ export class PayrollController {
   }
 
   @Post('ask')
-  @Roles(Role.ORGANIZATION_ADMIN, Role.HR_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ORGANIZATION_ADMIN, Role.HR_ADMIN, Role.EMPLOYEE)
   async askPayrollQuestion(@Req() req: any, @Body('query') query: string) {
     if (!query) {
       throw new BadRequestException('Query string is required');
     }
 
-    const answer = await this.openaiService.processNaturalLanguageQuery(
-      query,
-      req.user.organizationId,
-      async (orgId, args) => {
-        return this.payrollService.aggregatePayrollData(orgId, args);
-      },
-    );
+    const answer = await this.openaiService.processNaturalLanguageQuery(query, req.user);
 
     return {answer};
   }
