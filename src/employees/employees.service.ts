@@ -121,6 +121,15 @@ export class EmployeesService {
 
       include: {
         department: true,
+        salaryStructures: {
+          include: {
+            components: true,
+          },
+          orderBy: {
+            effectiveFrom: 'desc',
+          },
+          take: 1,
+        },
       },
 
       orderBy: {
